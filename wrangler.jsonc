@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "agent-html-plan-host",
+  "account_id": "c0c87ed06a9c44e3e5c62d295f3f6daf",
   "main": "src/worker.ts",
   "compatibility_date": "2026-07-07",
   "workers_dev": true,

@@ -108,9 +108,8 @@ CI runs on pull requests and pushes to `main`:
 
 CD runs only on pushes to `main`, after CI passes. It deploys with Wrangler and smoke-tests the public health endpoint.
 
-Add these GitHub repository secrets before enabling CD:
+Add this GitHub repository secret before enabling CD:
 
-- `CLOUDFLARE_ACCOUNT_ID`: `XXXXXXXXXXXXXXXX`
 - `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with permission to deploy this Worker and read/write its KV namespace.
 
 Recommended Cloudflare API token permissions:
