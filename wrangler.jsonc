@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-html-plan-host",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-07",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DEFAULT_TTL_SECONDS": "604800",
+    "MAX_TTL_SECONDS": "604800",
+    "MAX_HTML_BYTES": "1048576",
+    "RATE_LIMIT_UPLOADS_PER_HOUR": "60",
+    "ALLOW_PUBLIC_INDEX": "false"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "PLANS",
+      "id": "27d3e7aaad8e4cc9947279d00c85c1fd"
+    }
+  ]
+}
