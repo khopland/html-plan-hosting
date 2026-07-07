@@ -92,7 +92,34 @@ curl -X POST "http://127.0.0.1:8787/v1/plans" \
 ```sh
 npm test
 npm run typecheck
+npm run check
 ```
+
+## GitHub CI/CD
+
+The repo includes `.github/workflows/cloudflare-worker.yml`.
+
+CI runs on pull requests and pushes to `main`:
+
+- `npm ci`
+- `npm run typecheck`
+- `npm test`
+- `npx wrangler deploy --dry-run`
+
+CD runs only on pushes to `main`, after CI passes. It deploys with Wrangler and smoke-tests the public health endpoint.
+
+Add these GitHub repository secrets before enabling CD:
+
+- `CLOUDFLARE_ACCOUNT_ID`: `XXXXXXXXXXXXXXXX`
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with permission to deploy this Worker and read/write its KV namespace.
+
+Recommended Cloudflare API token permissions:
+
+- Account: `Workers Scripts:Edit`
+- Account: `Workers KV Storage:Edit`
+- Account: `Account Settings:Read`
+
+The Worker upload secret `PLAN_HOST_TOKEN` stays in Cloudflare as a Worker secret and does not need to be added to GitHub for deploys.
 
 ## Cloudflare deployment
 
