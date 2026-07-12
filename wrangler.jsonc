@@ -14,8 +14,15 @@
     "MAX_TTL_SECONDS": "604800",
     "MAX_HTML_BYTES": "1048576",
     "RATE_LIMIT_UPLOADS_PER_HOUR": "60",
-    "ALLOW_PUBLIC_INDEX": "false"
+    "ALLOW_PUBLIC_INDEX": "false",
+    "PUBLIC_BASE_URL": "https://plans.k8r.no",
+    "API_HOSTNAME": "plan-api.k8r.no",
+    "PREVIEW_HOSTNAME": "plans.k8r.no"
   },
+  "routes": [
+    { "pattern": "plan-api.k8r.no", "custom_domain": true },
+    { "pattern": "plans.k8r.no", "custom_domain": true }
+  ],
   "kv_namespaces": [
     {
       "binding": "PLANS",
@@ -27,8 +34,5 @@
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["UploadRateLimiter"] }
-  ],
-  "analytics_engine_datasets": [
-    { "binding": "PLAN_METRICS", "dataset": "agent_html_plan_host_events" }
   ]
 }

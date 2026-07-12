@@ -60,7 +60,7 @@ For production, use a separate hostname for previews, for example:
 This Worker can serve both paths, but keeping preview links on a distinct hostname is still the right deployment shape.
 Set `API_HOSTNAME` and `PREVIEW_HOSTNAME` to enforce that split at the Worker. Requests for an API route on the preview hostname, or a preview route on the API hostname, then return 404.
 
-The Worker emits structured JSON events named `plan_created`, `plan_deleted`, and `upload_rate_limited`. Internal failures use an error event with a request ID. Events are also written to Workers Analytics Engine for aggregation and monitoring; query examples are in `docs/observability.md`.
+The Worker emits structured JSON events named `plan_created`, `plan_deleted`, and `upload_rate_limited`. Internal failures use an error event with a request ID. Workers Logs are enabled in `wrangler.jsonc`; filter on the event name and correlate failures by request ID. Operational checks are documented in `docs/observability.md`.
 
 ## Local setup
 
@@ -157,10 +157,12 @@ Set the upload token as a Worker secret:
 npx wrangler secret put PLAN_HOST_TOKEN
 ```
 
-For production, update `PUBLIC_BASE_URL` in `wrangler.jsonc` to the public preview base URL:
+Production is configured with isolated custom hostnames:
 
 ```jsonc
-"PUBLIC_BASE_URL": "https://plans.example.com"
+"PUBLIC_BASE_URL": "https://plans.k8r.no",
+"API_HOSTNAME": "plan-api.k8r.no",
+"PREVIEW_HOSTNAME": "plans.k8r.no"
 ```
 
 Deploy:
