@@ -81,9 +81,16 @@ app.on("HEAD", "/p/:id", async (c) => handlePreview(c.req.param("id"), c.env, tr
 
 app.notFound(() => json({ error: "not_found" }, 404));
 
-app.onError((error) => {
-  const message = error instanceof Error ? error.message : "unknown_error";
-  return json({ error: "internal_error", message }, 500);
+app.onError((error, c) => {
+  const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+  console.error(JSON.stringify({
+    level: "error",
+    requestId,
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    message: error instanceof Error ? error.message : "unknown_error"
+  }));
+  return json({ error: "internal_error", request_id: requestId }, 500);
 });
 
 export default app;
@@ -290,8 +297,9 @@ async function authenticate(request: Request, env: Env): Promise<AuthResult> {
 
 function readConfig(env: Env) {
   const maxTtlSeconds = clampInteger(env.MAX_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS, MAX_TTL_SECONDS);
+  const defaultTtlFallback = Math.min(DEFAULT_TTL_SECONDS, maxTtlSeconds);
   return {
-    defaultTtlSeconds: clampInteger(env.DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, maxTtlSeconds, DEFAULT_TTL_SECONDS),
+    defaultTtlSeconds: clampInteger(env.DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, maxTtlSeconds, defaultTtlFallback),
     maxTtlSeconds,
     maxHtmlBytes: clampInteger(env.MAX_HTML_BYTES, 1, MAX_HTML_BYTES, MAX_HTML_BYTES),
     rateLimitUploadsPerHour: clampInteger(env.RATE_LIMIT_UPLOADS_PER_HOUR, 0, 1000, DEFAULT_RATE_LIMIT_UPLOADS_PER_HOUR)

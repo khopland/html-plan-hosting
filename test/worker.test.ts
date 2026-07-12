@@ -266,4 +266,46 @@ describe("agent html plan host", () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(429);
   });
+
+  it("keeps the default ttl within a lower configured maximum", async () => {
+    const env = createEnv({ DEFAULT_TTL_SECONDS: undefined, MAX_TTL_SECONDS: "120" });
+    const before = Date.now();
+    const response = await fetchWorker(
+      new Request("https://api.example.test/v1/plans", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-token",
+          "content-type": "text/html"
+        },
+        body: "<!doctype html><html><body>Short lived</body></html>"
+      }),
+      env
+    );
+    const body = (await response.json()) as { expires_at: string };
+
+    expect(response.status).toBe(201);
+    expect(Date.parse(body.expires_at) - before).toBeGreaterThan(119_000);
+    expect(Date.parse(body.expires_at) - before).toBeLessThan(121_000);
+  });
+
+  it("does not expose internal exception messages", async () => {
+    const env = createEnv({
+      PLANS: {
+        get: async () => {
+          throw new Error("sensitive storage detail");
+        }
+      } as unknown as KVNamespace
+    });
+    const response = await fetchWorker(
+      new Request("https://api.example.test/v1/plans/abcdefghijklmnopqrst", {
+        headers: { authorization: "Bearer test-token", "cf-ray": "test-request-id" }
+      }),
+      env
+    );
+    const body = (await response.json()) as { error: string; request_id: string; message?: string };
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: "internal_error", request_id: "test-request-id" });
+    expect(body.message).toBeUndefined();
+  });
 });
