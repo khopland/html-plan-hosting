@@ -322,6 +322,55 @@ describe("agent html plan host", () => {
     });
   });
 
+  it("rejects an oversized declared content length before reading the body", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode("<!doctype html><html><body>Plan</body></html>"));
+        controller.close();
+      }
+    });
+    const request = new Request("https://api.example.test/v1/plans", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "text/html",
+        "content-length": "2001"
+      },
+      body,
+      duplex: "half"
+    } as RequestInit & { duplex: "half" });
+    const response = await fetchWorker(request);
+
+    expect(response.status).toBe(413);
+    expect(request.bodyUsed).toBe(false);
+  });
+
+  it("enforces the byte limit on chunked bodies without content length", async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      encoder.encode("<!doctype html><html><body>"),
+      encoder.encode("x".repeat(2000)),
+      encoder.encode("</body></html>")
+    ];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      }
+    });
+    const response = await fetchWorker(
+      new Request("https://api.example.test/v1/plans", {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "content-type": "text/html" },
+        body,
+        duplex: "half"
+      } as RequestInit & { duplex: "half" })
+    );
+
+    expect(response.status).toBe(413);
+  });
+
   it("keeps the default ttl within a lower configured maximum", async () => {
     const env = createEnv({ DEFAULT_TTL_SECONDS: undefined, MAX_TTL_SECONDS: "120" });
     const before = Date.now();
@@ -341,6 +390,29 @@ describe("agent html plan host", () => {
     expect(response.status).toBe(201);
     expect(Date.parse(body.expires_at) - before).toBeGreaterThan(119_000);
     expect(Date.parse(body.expires_at) - before).toBeLessThan(121_000);
+  });
+
+  it.each([
+    { name: "invalid default", defaultTtl: "invalid", maxTtl: "120", expected: 120 },
+    { name: "default below minimum", defaultTtl: "1", maxTtl: "120", expected: 60 },
+    { name: "default above maximum", defaultTtl: "999", maxTtl: "120", expected: 120 }
+  ])("normalizes $name", async ({ defaultTtl, maxTtl, expected }) => {
+    const env = createEnv({ DEFAULT_TTL_SECONDS: defaultTtl, MAX_TTL_SECONDS: maxTtl });
+    const before = Date.now();
+    const response = await fetchWorker(
+      new Request("https://api.example.test/v1/plans", {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "content-type": "text/html" },
+        body: "<!doctype html><html><body>TTL matrix</body></html>"
+      }),
+      env
+    );
+    const body = (await response.json()) as { expires_at: string };
+    const actual = Date.parse(body.expires_at) - before;
+
+    expect(response.status).toBe(201);
+    expect(actual).toBeGreaterThan((expected - 1) * 1000);
+    expect(actual).toBeLessThan((expected + 1) * 1000);
   });
 
   it("does not expose internal exception messages", async () => {
