@@ -2,6 +2,8 @@
 
 A Hono-powered Cloudflare Workers microservice for agent-generated HTML plans.
 
+This repository also contains a ready-to-install agent skill in `SKILL.md` and its uploader in `scripts/upload-html-plan.mjs`.
+
 Agents upload one HTML document and receive a short-lived preview URL:
 
 ```sh
