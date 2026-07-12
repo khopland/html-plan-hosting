@@ -52,13 +52,7 @@ Uploaded HTML is treated as untrusted.
 - KV expiration automatically removes stored plans.
 - Valid uploads reserve quota atomically through a per-token Durable Object. Rejected uploads do not consume quota.
 
-For production, use a separate hostname for previews, for example:
-
-- API/admin: `html-plan-api.example.com`
-- Preview: `plans.example.com`
-
-This Worker can serve both paths, but keeping preview links on a distinct hostname is still the right deployment shape.
-Set `API_HOSTNAME` and `PREVIEW_HOSTNAME` to enforce that split at the Worker. Requests for an API route on the preview hostname, or a preview route on the API hostname, then return 404.
+This is a personal service at `plan-api.k8r.no`. Upload and preview routes share that origin. Preview HTML still runs under a restrictive CSP sandbox, while API routes require a bearer token and use no cookies.
 
 The Worker emits structured JSON events named `plan_created`, `plan_deleted`, and `upload_rate_limited`. Internal failures use an error event with a request ID. Workers Logs are enabled in `wrangler.jsonc`; filter on the event name and correlate failures by request ID. Operational checks are documented in `docs/observability.md`.
 
@@ -157,12 +151,10 @@ Set the upload token as a Worker secret:
 npx wrangler secret put PLAN_HOST_TOKEN
 ```
 
-Production is configured with isolated custom hostnames:
+Production uses one custom hostname:
 
 ```jsonc
-"PUBLIC_BASE_URL": "https://plans.k8r.no",
-"API_HOSTNAME": "plan-api.k8r.no",
-"PREVIEW_HOSTNAME": "plans.k8r.no"
+"PUBLIC_BASE_URL": "https://plan-api.k8r.no"
 ```
 
 Deploy:

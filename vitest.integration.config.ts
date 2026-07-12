@@ -9,9 +9,7 @@ export default defineConfig({
         bindings: {
           PLAN_HOST_TOKEN: "integration-token",
           PUBLIC_BASE_URL: "https://plans.example.test",
-          RATE_LIMIT_UPLOADS_PER_HOUR: "2",
-          API_HOSTNAME: "api.example.test",
-          PREVIEW_HOSTNAME: "plans.example.test"
+          RATE_LIMIT_UPLOADS_PER_HOUR: "2"
         }
       }
     })
