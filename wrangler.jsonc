@@ -20,5 +20,8 @@
       "binding": "PLANS",
       "id": "27d3e7aaad8e4cc9947279d00c85c1fd"
     }
+  ],
+  "migrations": [
+    { "tag": "v2", "deleted_classes": ["UploadRateLimiter"] }
   ]
 }
