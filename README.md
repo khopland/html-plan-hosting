@@ -5,8 +5,9 @@ A tiny Cloudflare Worker that stores an HTML file in KV and returns a temporary 
 ## What it does
 
 - `POST /v1/plans` uploads HTML with a bearer secret.
-- `GET /p/:id` displays it for up to seven days.
-- Each plan costs one KV write.
+- `POST /v1/plans/:id` adds an immutable revision.
+- `GET /p/:id` displays the latest version for up to seven days.
+- Each version has Previous, Next, Latest, and History navigation.
 - Preview pages use a restrictive CSP that blocks scripts, forms, and framing.
 - Uploads are limited to 1 MiB.
 
@@ -68,5 +69,16 @@ JSON is also accepted by the bundled uploader:
 ```json
 { "html": "<!doctype html>...", "ttl_seconds": 86400 }
 ```
+
+The first upload returns an `update_token`. Keep it private and use it to add a revision:
+
+```sh
+node scripts/upload-html-plan.mjs plan.html \
+  --plan-id PLAN_ID \
+  --update-token UPDATE_TOKEN \
+  --change-summary "Added rollout checks"
+```
+
+The stable `/p/:id` URL always shows the newest revision. `/p/:id/history` lists every change, and `/p/:id/v/:number` opens a specific snapshot. Updates do not extend the original expiry.
 
 TTL is clamped between one minute and seven days. Links are public to anyone who knows the random URL.

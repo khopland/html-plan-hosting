@@ -42,6 +42,49 @@ describe("html plan host", () => {
     expect(preview.headers.get("content-security-policy")).toContain("sandbox");
   });
 
+  it("updates a plan while keeping old versions navigable", async () => {
+    const environment = env();
+    const createdResponse = await upload("laptop", environment);
+    const created = await createdResponse.json() as { id: string; url: string; update_token: string };
+    const updatedResponse = await worker.fetch(new Request(`https://api.test/v1/plans/${created.id}`, {
+      method: "POST",
+      headers: { authorization: "Bearer laptop", "content-type": "application/json" },
+      body: JSON.stringify({
+        html: "<!doctype html><html><body>Updated plan</body></html>",
+        update_token: created.update_token,
+        change_summary: "Added the rollout steps"
+      })
+    }), environment);
+    const updated = await updatedResponse.json() as { version: number };
+    const latest = await worker.fetch(new Request(created.url), environment);
+    const first = await worker.fetch(new Request(`${created.url}/v/1`), environment);
+    const history = await worker.fetch(new Request(`${created.url}/history`), environment);
+    const latestHtml = await latest.text();
+    const firstHtml = await first.text();
+    const historyHtml = await history.text();
+
+    expect(updated).toEqual(expect.objectContaining({ version: 2 }));
+    expect(latestHtml).toContain("Updated plan");
+    expect(latestHtml).toContain("Version 2 of 2");
+    expect(latestHtml).toContain(`/p/${created.id}/v/1`);
+    expect(latestHtml).toContain("History");
+    expect(firstHtml).toContain("Plan</body>");
+    expect(firstHtml).not.toContain("Updated plan");
+    expect(historyHtml).toContain("Added the rollout steps");
+    expect(historyHtml).toContain("Version 1");
+  });
+
+  it("rejects updates with the wrong update token", async () => {
+    const environment = env();
+    const created = await (await upload("laptop", environment)).json() as { id: string };
+    const response = await worker.fetch(new Request(`https://api.test/v1/plans/${created.id}`, {
+      method: "POST",
+      headers: { authorization: "Bearer laptop", "content-type": "application/json" },
+      body: JSON.stringify({ html: "<!doctype html><html><body>Bad update</body></html>", update_token: "wrong", change_summary: "Bad" })
+    }), environment);
+    expect(response.status).toBe(403);
+  });
+
   it("rejects invalid and oversized uploads", async () => {
     const environment = env();
     const invalid = await worker.fetch(new Request("https://api.test/v1/plans", {
