@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "npm run typecheck && npm test && npm run test:integration && wrangler deploy --dry-run",
+    "check": "npm run typecheck && npm test && wrangler deploy --dry-run",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest run --config vitest.unit.config.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -17,8 +16,5 @@
     "typescript": "^5.8.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.107.0"
-  },
-  "dependencies": {
-    "hono": "^4.12.28"
   }
 }

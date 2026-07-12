@@ -39,6 +39,9 @@ The config file format is:
 PLAN_HOST_TOKEN=...
 ```
 
+`PLAN_HOST_TOKEN` is the secret assigned to this machine. The server accepts multiple
+machine secrets from its comma- or whitespace-separated `PLAN_HOST_TOKENS` secret.
+
 Optional environment variables:
 
 - `HTML_PLAN_HOST_BASE_URL`: override the Worker URL.

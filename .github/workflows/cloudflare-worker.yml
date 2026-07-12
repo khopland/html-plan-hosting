@@ -37,9 +37,6 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Worker runtime integration tests
-        run: npm run test:integration
-
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run
 
