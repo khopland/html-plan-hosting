@@ -10,6 +10,8 @@ export interface Env {
   MAX_HTML_BYTES?: string;
   RATE_LIMIT_UPLOADS_PER_HOUR?: string;
   ALLOW_PUBLIC_INDEX?: string;
+  API_HOSTNAME?: string;
+  PREVIEW_HOSTNAME?: string;
 }
 
 interface PlanMetadata {
@@ -66,6 +68,16 @@ const CORS_HEADERS = {
 const app = new Hono<{ Bindings: Env }>();
 
 app.options("*", () => new Response(null, { status: 204, headers: CORS_HEADERS }));
+
+app.use("/v1/*", async (c, next) => {
+  if (!isAllowedHostname(c.req.raw, c.env.API_HOSTNAME)) return json({ error: "not_found" }, 404);
+  await next();
+});
+
+app.use("/p/*", async (c, next) => {
+  if (!isAllowedHostname(c.req.raw, c.env.PREVIEW_HOSTNAME)) return previewError("Invalid plan URL.", 404);
+  await next();
+});
 
 app.get("/", (c) => handleIndex(c.env));
 
@@ -176,6 +188,8 @@ async function handleCreatePlan(request: Request, env: Env): Promise<Response> {
     metadata: { expiresAt: metadata.expiresAt }
   });
 
+  logEvent("plan_created", { id, tokenHash: auth.tokenHash, sizeBytes, ttlSeconds });
+
   const publicBaseUrl = getPublicBaseUrl(env, request);
   return json(
     {
@@ -239,6 +253,7 @@ async function handleDeletePlan(id: string, request: Request, env: Env): Promise
   }
 
   await Promise.all([env.PLANS.delete(htmlKey(id)), env.PLANS.delete(metaKey(id))]);
+  logEvent("plan_deleted", { id, tokenHash: auth.tokenHash });
   return json({ deleted: true, id });
 }
 
@@ -323,6 +338,7 @@ async function checkUploadRateLimit(env: Env, tokenHash: string, limit: number):
     body: JSON.stringify({ bucket: now.toISOString().slice(0, 13), limit })
   });
   if (!result.ok) {
+    logEvent("upload_rate_limited", { tokenHash, limit, retryAfterSeconds: secondsUntilNextHour(now) });
     return json(
       {
         error: "rate_limited",
@@ -505,6 +521,14 @@ function getPublicBaseUrl(env: Env, request: Request): string {
 
   const url = new URL(request.url);
   return url.origin;
+}
+
+function isAllowedHostname(request: Request, configuredHostname: string | undefined): boolean {
+  return !configuredHostname || new URL(request.url).hostname === configuredHostname.toLowerCase();
+}
+
+function logEvent(event: string, fields: Record<string, string | number | boolean | null>): void {
+  console.info(JSON.stringify({ level: "info", event, ...fields }));
 }
 
 function previewError(message: string, status: number): Response {
