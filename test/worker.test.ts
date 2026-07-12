@@ -66,6 +66,14 @@ class MemoryRateLimiterNamespace {
   }
 }
 
+class MemoryMetrics {
+  points: AnalyticsEngineDataPoint[] = [];
+
+  writeDataPoint(point: AnalyticsEngineDataPoint): void {
+    this.points.push(point);
+  }
+}
+
 function createEnv(overrides: Partial<Env> = {}): Env {
   return {
     PLANS: new MemoryKV() as unknown as KVNamespace,
@@ -288,6 +296,23 @@ describe("agent html plan host", () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(429);
+  });
+
+  it("records lifecycle and rate-limit metrics", async () => {
+    const metrics = new MemoryMetrics();
+    const env = createEnv({
+      RATE_LIMIT_UPLOADS_PER_HOUR: "1",
+      PLAN_METRICS: metrics as unknown as AnalyticsEngineDataset
+    });
+    const request = () => new Request("https://api.example.test/v1/plans", {
+      method: "POST",
+      headers: { authorization: "Bearer test-token", "content-type": "text/html" },
+      body: "<!doctype html><html><body>Measured</body></html>"
+    });
+
+    expect((await fetchWorker(request(), env)).status).toBe(201);
+    expect((await fetchWorker(request(), env)).status).toBe(429);
+    expect(metrics.points.map((point) => point.blobs?.[0])).toEqual(["plan_created", "upload_rate_limited"]);
   });
 
   it("does not consume quota for rejected uploads", async () => {

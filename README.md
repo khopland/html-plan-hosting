@@ -60,7 +60,7 @@ For production, use a separate hostname for previews, for example:
 This Worker can serve both paths, but keeping preview links on a distinct hostname is still the right deployment shape.
 Set `API_HOSTNAME` and `PREVIEW_HOSTNAME` to enforce that split at the Worker. Requests for an API route on the preview hostname, or a preview route on the API hostname, then return 404.
 
-The Worker emits structured JSON events named `plan_created`, `plan_deleted`, and `upload_rate_limited`. Internal failures use an error event with a request ID. Workers Logs and Traces can alert on these events without exposing exception details to callers.
+The Worker emits structured JSON events named `plan_created`, `plan_deleted`, and `upload_rate_limited`. Internal failures use an error event with a request ID. Events are also written to Workers Analytics Engine for aggregation and monitoring; query examples are in `docs/observability.md`.
 
 ## Local setup
 

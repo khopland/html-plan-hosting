@@ -27,5 +27,8 @@
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["UploadRateLimiter"] }
+  ],
+  "analytics_engine_datasets": [
+    { "binding": "PLAN_METRICS", "dataset": "agent_html_plan_host_events" }
   ]
 }
