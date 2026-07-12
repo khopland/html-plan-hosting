@@ -47,14 +47,6 @@ describe("Worker runtime integration", () => {
     expect(invalid.status).toBe(404);
   });
 
-  it("isolates API and preview routes by hostname", async () => {
-    const apiOnPreviewHost = await exports.default.fetch("https://plans.example.test/v1/plans", { headers: authorization });
-    const previewOnApiHost = await exports.default.fetch("https://api.example.test/p/abcdefghijklmnopqrstuvwx");
-
-    expect(apiOnPreviewHost.status).toBe(404);
-    expect(previewOnApiHost.status).toBe(404);
-  });
-
   it("treats partially missing and expired KV records as unavailable", async () => {
     const partialId = "abcdefghijklmnopqrstuvwx";
     await env.PLANS.put(`plan:${partialId}:html`, "<!doctype html><html><body>orphan</body></html>");

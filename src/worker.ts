@@ -10,8 +10,6 @@ export interface Env {
   MAX_HTML_BYTES?: string;
   RATE_LIMIT_UPLOADS_PER_HOUR?: string;
   ALLOW_PUBLIC_INDEX?: string;
-  API_HOSTNAME?: string;
-  PREVIEW_HOSTNAME?: string;
 }
 
 interface PlanMetadata {
@@ -68,16 +66,6 @@ const CORS_HEADERS = {
 const app = new Hono<{ Bindings: Env }>();
 
 app.options("*", () => new Response(null, { status: 204, headers: CORS_HEADERS }));
-
-app.use("/v1/*", async (c, next) => {
-  if (!isAllowedHostname(c.req.raw, c.env.API_HOSTNAME)) return json({ error: "not_found" }, 404);
-  await next();
-});
-
-app.use("/p/*", async (c, next) => {
-  if (!isAllowedHostname(c.req.raw, c.env.PREVIEW_HOSTNAME)) return previewError("Invalid plan URL.", 404);
-  await next();
-});
 
 app.get("/", (c) => handleIndex(c.env));
 
@@ -521,10 +509,6 @@ function getPublicBaseUrl(env: Env, request: Request): string {
 
   const url = new URL(request.url);
   return url.origin;
-}
-
-function isAllowedHostname(request: Request, configuredHostname: string | undefined): boolean {
-  return !configuredHostname || new URL(request.url).hostname === configuredHostname.toLowerCase();
 }
 
 function logEvent(event: string, fields: Record<string, string | number | boolean | null>): void {
