@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import process from "node:process";
 
-const DEFAULT_BASE_URL = "https://agent-html-plan-host.97krihop.workers.dev";
+const DEFAULT_BASE_URL = "https://plan-api.k8r.no";
 const CONFIG_PATH = resolve(process.env.HOME || ".", ".config/html-plan-host/env");
 
 function usage() {
