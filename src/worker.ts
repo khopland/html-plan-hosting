@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 export interface Env {
   PLANS: KVNamespace;
+  UPLOAD_RATE_LIMITER: DurableObjectNamespace;
   PLAN_HOST_TOKEN?: string;
   PUBLIC_BASE_URL?: string;
   DEFAULT_TTL_SECONDS?: string;
@@ -35,6 +36,7 @@ const MAX_HTML_BYTES = 1024 * 1024;
 const DEFAULT_RATE_LIMIT_UPLOADS_PER_HOUR = 60;
 const MIN_TTL_SECONDS = 60;
 const ID_BYTES = 18;
+const JSON_BODY_OVERHEAD_BYTES = 2048;
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -102,18 +104,15 @@ async function handleCreatePlan(request: Request, env: Env): Promise<Response> {
   }
 
   const parsed = readConfig(env);
-  const rateLimit = await checkUploadRateLimit(env, auth.tokenHash, parsed.rateLimitUploadsPerHour);
-  if (rateLimit) {
-    return rateLimit;
-  }
-
   let html: string;
   let title: string | null = null;
   let ttlSeconds = parsed.defaultTtlSeconds;
 
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    const body = await safeJson<JsonUpload>(request);
+    const bodyText = await readBodyWithLimit(request, parsed.maxHtmlBytes * 6 + JSON_BODY_OVERHEAD_BYTES);
+    if (!bodyText.ok) return bodyText.response;
+    const body = safeJson<JsonUpload>(bodyText.value);
     if (!body || typeof body.html !== "string") {
       return json({ error: "invalid_request", message: "JSON body must include an html string." }, 400);
     }
@@ -122,7 +121,9 @@ async function handleCreatePlan(request: Request, env: Env): Promise<Response> {
     title = typeof body.title === "string" ? cleanTitle(body.title) : null;
     ttlSeconds = parseRequestedTtl(body.ttl_seconds, parsed.defaultTtlSeconds, parsed.maxTtlSeconds);
   } else if (contentType.includes("text/html") || contentType === "") {
-    html = await request.text();
+    const body = await readBodyWithLimit(request, parsed.maxHtmlBytes);
+    if (!body.ok) return body.response;
+    html = body.value;
     ttlSeconds = parseRequestedTtl(new URL(request.url).searchParams.get("ttl_seconds"), parsed.defaultTtlSeconds, parsed.maxTtlSeconds);
   } else {
     return json({ error: "unsupported_media_type", message: "Use text/html or application/json." }, 415);
@@ -146,6 +147,9 @@ async function handleCreatePlan(request: Request, env: Env): Promise<Response> {
   if (!looksLikeHtml(html)) {
     return json({ error: "invalid_request", message: "Upload must look like an HTML document." }, 400);
   }
+
+  const rateLimit = await checkUploadRateLimit(env, auth.tokenHash, parsed.rateLimitUploadsPerHour);
+  if (rateLimit) return rateLimit;
 
   const id = createId();
   const now = new Date();
@@ -312,10 +316,13 @@ async function checkUploadRateLimit(env: Env, tokenHash: string, limit: number):
   }
 
   const now = new Date();
-  const bucket = now.toISOString().slice(0, 13);
-  const key = `rate:${tokenHash}:${bucket}`;
-  const current = Number((await env.PLANS.get(key, "text")) ?? "0");
-  if (Number.isFinite(current) && current >= limit) {
+  const stub = env.UPLOAD_RATE_LIMITER.get(env.UPLOAD_RATE_LIMITER.idFromName(tokenHash));
+  const result = await stub.fetch("https://rate-limiter.internal/check", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ bucket: now.toISOString().slice(0, 13), limit })
+  });
+  if (!result.ok) {
     return json(
       {
         error: "rate_limited",
@@ -325,10 +332,6 @@ async function checkUploadRateLimit(env: Env, tokenHash: string, limit: number):
       429
     );
   }
-
-  await env.PLANS.put(key, String((Number.isFinite(current) ? current : 0) + 1), {
-    expirationTtl: secondsUntilNextHour(now) + 300
-  });
 
   return null;
 }
@@ -361,11 +364,62 @@ function secondsUntilNextHour(now: Date): number {
   return Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 1000));
 }
 
-async function safeJson<T>(request: Request): Promise<T | null> {
+function safeJson<T>(value: string): T | null {
   try {
-    return (await request.json()) as T;
+    return JSON.parse(value) as T;
   } catch {
     return null;
+  }
+}
+
+type BodyReadResult = { ok: true; value: string } | { ok: false; response: Response };
+
+async function readBodyWithLimit(request: Request, maxBytes: number): Promise<BodyReadResult> {
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    return { ok: false, response: payloadTooLarge(maxBytes) };
+  }
+  if (!request.body) return { ok: true, value: "" };
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return { ok: true, value: text + decoder.decode() };
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel("payload_too_large");
+      return { ok: false, response: payloadTooLarge(maxBytes) };
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
+function payloadTooLarge(maxBytes: number): Response {
+  return json({ error: "payload_too_large", message: `Request body exceeds the ${maxBytes} byte limit.` }, 413);
+}
+
+interface RateLimitState { bucket: string; count: number }
+
+export class UploadRateLimiter {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const input = safeJson<{ bucket?: unknown; limit?: unknown }>(await request.text());
+    if (!input || typeof input.bucket !== "string" || typeof input.limit !== "number") {
+      return new Response(null, { status: 400 });
+    }
+    const { bucket, limit } = input as { bucket: string; limit: number };
+    const allowed = await this.state.storage.transaction(async (storage) => {
+      const current = await storage.get<RateLimitState>("window");
+      const count = current?.bucket === bucket ? current.count : 0;
+      if (count >= limit) return false;
+      await storage.put("window", { bucket, count: count + 1 });
+      return true;
+    });
+    return new Response(null, { status: allowed ? 204 : 429 });
   }
 }
 

@@ -21,5 +21,11 @@
       "binding": "PLANS",
       "id": "27d3e7aaad8e4cc9947279d00c85c1fd"
     }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "UPLOAD_RATE_LIMITER", "class_name": "UploadRateLimiter" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UploadRateLimiter"] }
   ]
 }

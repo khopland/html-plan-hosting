@@ -44,9 +44,32 @@ class MemoryKV {
   }
 }
 
+class MemoryRateLimiterNamespace {
+  private counts = new Map<string, { bucket: string; count: number }>();
+
+  idFromName(name: string): DurableObjectId {
+    return name as unknown as DurableObjectId;
+  }
+
+  get(id: DurableObjectId): DurableObjectStub {
+    const key = id as unknown as string;
+    return {
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const input = JSON.parse(String(init?.body)) as { bucket: string; limit: number };
+        const current = this.counts.get(key);
+        const count = current?.bucket === input.bucket ? current.count : 0;
+        if (count >= input.limit) return new Response(null, { status: 429 });
+        this.counts.set(key, { bucket: input.bucket, count: count + 1 });
+        return new Response(null, { status: 204 });
+      }
+    } as unknown as DurableObjectStub;
+  }
+}
+
 function createEnv(overrides: Partial<Env> = {}): Env {
   return {
     PLANS: new MemoryKV() as unknown as KVNamespace,
+    UPLOAD_RATE_LIMITER: new MemoryRateLimiterNamespace() as unknown as DurableObjectNamespace,
     PLAN_HOST_TOKEN: "test-token",
     PUBLIC_BASE_URL: "https://plans.example.test",
     DEFAULT_TTL_SECONDS: "3600",
@@ -265,6 +288,38 @@ describe("agent html plan host", () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(429);
+  });
+
+  it("does not consume quota for rejected uploads", async () => {
+    const env = createEnv({ RATE_LIMIT_UPLOADS_PER_HOUR: "1" });
+    const upload = (body: string) => fetchWorker(
+      new Request("https://api.example.test/v1/plans", {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "content-type": "text/html" },
+        body
+      }),
+      env
+    );
+
+    expect((await upload("not html")).status).toBe(400);
+    expect((await upload("<!doctype html><html><body>Valid</body></html>")).status).toBe(201);
+    expect((await upload("<!doctype html><html><body>Over quota</body></html>")).status).toBe(429);
+  });
+
+  it("stops reading raw html after the configured byte limit", async () => {
+    const response = await fetchWorker(
+      new Request("https://api.example.test/v1/plans", {
+        method: "POST",
+        headers: { authorization: "Bearer test-token", "content-type": "text/html" },
+        body: `<!doctype html><html><body>${"x".repeat(2100)}</body></html>`
+      })
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: "payload_too_large",
+      message: "Request body exceeds the 2000 byte limit."
+    });
   });
 
   it("keeps the default ttl within a lower configured maximum", async () => {
