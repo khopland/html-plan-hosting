@@ -33,7 +33,7 @@ This implementation targets the Cloudflare free plan. Current Cloudflare limits 
 - Workers KV: 1 GB storage, 100,000 reads/day, 1,000 writes/day.
 - KV value size: 25 MiB.
 
-This app defaults to a stricter 1 MiB HTML upload cap and seven-day TTL. Each upload uses two KV writes for the plan plus one short-lived KV write for rate limiting.
+This app defaults to a stricter 1 MiB HTML upload cap and seven-day TTL. Request bodies are stopped while streaming once their configured ceiling is exceeded. Each successful upload uses two KV writes; rate-limit state lives in a SQLite-backed Durable Object.
 
 ## Security model
 
@@ -50,7 +50,7 @@ Uploaded HTML is treated as untrusted.
   - CSP `sandbox`
 - Plan IDs are random URL-safe tokens.
 - KV expiration automatically removes stored plans.
-- Uploads are rate limited per bearer token hash.
+- Valid uploads reserve quota atomically through a per-token Durable Object. Rejected uploads do not consume quota.
 
 For production, use a separate hostname for previews, for example:
 
@@ -206,6 +206,6 @@ Authenticated deletion.
 
 ## Free-plan notes
 
-The free-plan write cap is the practical limit. Since each plan writes two KV keys plus one rate-limit counter, expect roughly 333 uploads/day before hitting KV write limits. Deletes also count as delete operations. If you outgrow this, move content to R2 and keep only metadata/rate limits in KV, D1, or Durable Objects.
+The free-plan write cap is the practical limit. Since each plan writes two KV keys, expect roughly 500 uploads/day before hitting KV write limits. Deletes also count as delete operations. If you outgrow this, move content to R2 and keep metadata in KV or D1; the atomic rate limiter can remain in Durable Objects.
 
 KV is eventually consistent. This is acceptable for generated preview plans, but immediately reading a just-written plan from a far-away Cloudflare location can theoretically lag. If that becomes a problem, move to Durable Objects or D1/R2.
